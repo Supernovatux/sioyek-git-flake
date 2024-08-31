@@ -7,12 +7,15 @@
 
   outputs =
     { self, nixpkgs }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    in
     {
-      packages.x86_64-linux.sioyek = nixpkgs.legacyPackages.x86_64-linux.stdenv.mkDerivation rec {
+      packages.x86_64-linux.sioyek = pkgs.stdenv.mkDerivation rec {
         pname = "sioyek";
         version = "2.0.0-r894-ga34015156";
 
-        src = nixpkgs.legacyPackages.x86_64-linux.fetchFromGitHub {
+        src = pkgs.fetchFromGitHub {
           owner = "ahrm";
           repo = "sioyek";
           rev = "4015156";
@@ -21,13 +24,13 @@
 
         patches = [ ./standard-path-mupdf-build.patch ];
 
-        nativeBuildInputs = with nixpkgs.legacyPackages.x86_64-linux; [
+        nativeBuildInputs = with pkgs; [
           kdePackages.qmake
           installShellFiles
           kdePackages.wrapQtAppsHook
         ];
 
-        buildInputs = with nixpkgs.legacyPackages.x86_64-linux; [
+        buildInputs = with pkgs; [
           mupdf
           gumbo
           jbig2dec
@@ -35,6 +38,7 @@
           openjpeg
           kdePackages.qt3d
           kdePackages.qtbase
+          kdePackages.qtspeech
         ];
         postPatch = ''
           substituteInPlace pdf_viewer_build_config.pro \
@@ -44,10 +48,6 @@
             --replace "/usr/share/sioyek" "$out/share" \
             --replace "/etc/sioyek" "$out/etc"
         '';
-        qmakeFlags =
-          nixpkgs.legacyPackages.x86_64-linux.lib.optionals
-            nixpkgs.legacyPackages.x86_64-linux.stdenv.isDarwin
-            [ "CONFIG+=non_portable" ];
         postInstall = ''
           install -Dm644 tutorial.pdf $out/share/tutorial.pdf
           cp -r pdf_viewer/shaders $out/share/
