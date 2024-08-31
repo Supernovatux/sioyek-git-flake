@@ -39,6 +39,7 @@
           kdePackages.qt3d
           kdePackages.qtbase
           kdePackages.qtspeech
+          kdePackages.qtwayland
         ];
         postPatch = ''
           substituteInPlace pdf_viewer_build_config.pro \
