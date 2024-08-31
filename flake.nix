@@ -1,47 +1,79 @@
 {
   description = "Flake for sioyek PDF viewer";
 
-  outputs = { self, nixpkgs }: {
-    packages.x86_64-linux.sioyek = nixpkgs.lib.mkDerivation rec {
-      pname = "sioyek";
-      version = "2.0.0-r893-ga3aeca4";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable"; # Add this line to import nixpkgs
+  };
 
-      src = nixpkgs.fetchFromGitHub {
-        owner = "ahrm";
-        repo = "sioyek";
-        rev = "a3aeca4";
-        sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Replace with the actual hash
-      };
+  outputs =
+    { self, nixpkgs }:
+    {
+      packages.x86_64-linux.sioyek = nixpkgs.legacyPackages.x86_64-linux.stdenv.mkDerivation rec {
+        pname = "sioyek";
+        version = "2.0.0-r893-ga3aeca4";
 
-      patches = [ ./standard-path-mupdf-build.patch ];
+        src = nixpkgs.legacyPackages.x86_64-linux.fetchFromGitHub {
+          owner = "ahrm";
+          repo = "sioyek";
+          rev = "a3aeca4";
+          sha256 = "sha256-2i54zNe8IOI80/qPTVI4iMCt5H1griDlfOHTqGw5eig="; # Replace with the actual hash
+        };
 
-      nativeBuildInputs = [ nixpkgs.qt6.qtbase nixpkgs.qt6.qtdeclarative nixpkgs.qt6.qtsvg nixpkgs.qt6.qtspeech nixpkgs.qt6.qt3d nixpkgs.git ];
+        patches = [ ./standard-path-mupdf-build.patch ];
 
-      buildInputs = [ nixpkgs.libmupdf ];
+        nativeBuildInputs = with nixpkgs.legacyPackages.x86_64-linux.kdePackages; [
+          qtbase
+          qmake
+          qtdeclarative
+          qtsvg
+          qtspeech
+          qt3d
+          nixpkgs.legacyPackages.x86_64-linux.git
+	  nixpkgs.legacyPackages.x86_64-linux.installShellFiles
+          wrapQtAppsHook
+        ];
 
-      buildPhase = ''
-        cd sioyek
-        qmake CONFIG+=linux_app_image pdf_viewer_build_config.pro
-        make
-      '';
+        buildInputs =with nixpkgs.legacyPackages.x86_64-linux; [ mupdf gumbo jbig2dec mujs openjpeg kdePackages.qt3d kdePackages.qtbase];
+        postPatch = ''
+          substituteInPlace pdf_viewer_build_config.pro \
+            --replace "-lmupdf-threads" "-lgumbo -lharfbuzz -lfreetype -ljbig2dec -ljpeg -lopenjp2" \
+            --replace "-lmupdf-third" ""
+          substituteInPlace pdf_viewer/main.cpp \
+            --replace "/usr/share/sioyek" "$out/share" \
+            --replace "/etc/sioyek" "$out/etc"
+        '';
+        qmakeFlags =
+          nixpkgs.legacyPackages.x86_64-linux.lib.optionals
+            nixpkgs.legacyPackages.x86_64-linux.stdenv.isDarwin
+            [ "CONFIG+=non_portable" ];
+        postInstall =
+          if nixpkgs.legacyPackages.x86_64-linux.stdenv.isDarwin then
+            ''
+              cp -r pdf_viewer/shaders sioyek.app/Contents/MacOS/shaders
+              cp pdf_viewer/prefs.config sioyek.app/Contents/MacOS/
+              cp pdf_viewer/prefs_user.config sioyek.app/Contents/MacOS/
+              cp pdf_viewer/keys.config sioyek.app/Contents/MacOS/
+              cp pdf_viewer/keys_user.config sioyek.app/Contents/MacOS/
+              cp tutorial.pdf sioyek.app/Contents/MacOS/
 
-      installPhase = ''
-        make INSTALL_ROOT=$out install
-        mkdir -p $out/usr/share/sioyek
-        install -D tutorial.pdf $out/usr/share/sioyek/
-        install -Dm644 pdf_viewer/keys.config pdf_viewer/prefs.config $out/etc/sioyek/
-        install -Dm644 resources/sioyek.1 $out/usr/share/man/man1/
-        mkdir -p $out/usr/share/sioyek/shaders
-        cp -r pdf_viewer/shaders/* $out/usr/share/sioyek/shaders
-      '';
+              mkdir -p $out/Applications $out/bin
+              cp -r sioyek.app $out/Applications
+              ln -s $out/Applications/sioyek.app/Contents/MacOS/sioyek $out/bin/sioyek
+            ''
+          else
+            ''
+              install -Dm644 tutorial.pdf $out/share/tutorial.pdf
+              cp -r pdf_viewer/shaders $out/share/
+              install -Dm644 -t $out/etc/ pdf_viewer/{keys,prefs}.config
+              installManPage resources/sioyek.1
+            '';
 
-      meta = with nixpkgs.lib; {
-        description = "PDF viewer for research papers and technical books.";
-        homepage = "https://github.com/ahrm/sioyek";
-        license = licenses.gpl3;
-        platforms = platforms.linux;
+        meta = with nixpkgs.lib; {
+          description = "PDF viewer for research papers and technical books.";
+          homepage = "https://github.com/ahrm/sioyek";
+          license = licenses.gpl3;
+          platforms = platforms.linux;
+        };
       };
     };
-  };
 }
-
